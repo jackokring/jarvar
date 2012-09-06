@@ -13,7 +13,8 @@ public class Real extends Blank implements Numeric {
 		Lit x = val(real);
 		if(compare(imaginary, 0.0)) {
 			x.unite(new Lit(" ")).unite(val(imaginary))
-				.unite(new Lit(" imagine plus"));
+				.unite(new Lit(" ")).unite(Vocab.find(new Lit("imagine")).toLit())
+				.unite(new Lit(" ")).unite(Vocab.find(new Lit("plus")).toLit());
 		}
 		return x;
 	}
