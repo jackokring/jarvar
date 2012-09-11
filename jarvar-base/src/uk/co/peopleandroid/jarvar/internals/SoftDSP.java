@@ -35,13 +35,13 @@ public class SoftDSP extends Thread {
 		x *= asF(id);
 		x = asF(ic) - x;
 		x *= asF(ib);
-		mem[ia] = asI(x);
-		a = (a++) & 255;
+		a++;
 		if(x == Float.NaN) a = d;
 		if(x == Float.NEGATIVE_INFINITY || x == Float.POSITIVE_INFINITY) a = b;
 		if(x == 0.0) a = c;
-		pc = (a << 24) | (b << 16) | (c << 8) | d;//restore pc
+		pc = (a << 24) | (pc & 0xffffff);//restore pc
 		mem[0] = pc;
+		mem[ia] = asI(x);//as jump vectoring allowed!!!
 	}
 	
 	float asF(int idx) {
