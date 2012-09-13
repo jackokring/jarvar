@@ -1,8 +1,28 @@
 package uk.co.peopleandroid.jarvar.internals;
 
+/* lazy DSP evaluation, while maintaining absolute
+ * relative synchronization. This is to acurately
+ * simulate massively parallel DSP, ensuring the
+ * master processor does copying between DSPs
+ * such that sequence is maintained. Reading element
+ * 0 is the best way to check for DSP halt or
+ * complete.
+ */
+
 public class SoftDSP extends Thread {
 	
 	boolean running = true;
+	boolean locking = false;
+	long ops;
+	static SoftDSP list;
+	SoftDSP next;
+	
+	public SoftDSP() {
+		next = list;
+		list = this;
+		ops = mops();
+		this.start();
+	}
 
 	public void run() {
 		while(running) {
@@ -11,13 +31,39 @@ public class SoftDSP extends Thread {
 		}
 	}
 	
+	public synchronized int read(int x) {
+		evalTo();
+		return mem[x & 255];
+	}
+	
+	public synchronized void write(int x, int val) {
+		evalTo();
+		if(x == 0) locking = true;
+		mem[x & 255] = val;
+	}
+	
+	void evalTo() {
+		long maxOps = mops();
+		while(running && maxOps > ops) eval();
+	}
+	
+	synchronized long mops() {
+		SoftDSP h = list;
+		long max = 0;
+		while(h != null) {
+			if(ops > max) max = ops;
+			h = h.next;
+		}
+		return max;
+	}
+	
 	public void destroy() {
 		running = false;
 	}
 	
-	int mem[] = new int[1024];
+	int mem[] = new int[256];
 	
-	void eval() {
+	synchronized void eval() {
 		int pc = mem[0];
 		int a = pc >>> 24;//pc
 		int b = (pc >> 16) & 255;//inf
@@ -40,8 +86,14 @@ public class SoftDSP extends Thread {
 		if(x == Float.NEGATIVE_INFINITY || x == Float.POSITIVE_INFINITY) a = b;
 		if(x == 0.0) a = c;
 		pc = (a << 24) | (pc & 0xffffff);//restore pc
-		mem[0] = pc;
-		mem[ia] = asI(x);//as jump vectoring allowed!!!
+		if(!locking) {
+			mem[0] = pc;
+			mem[ia] = asI(x);//as jump vectoring allowed!!!
+		} else {
+			if(ia != 0) mem[ia] = asI(x);//as jump vectoring allowed!!!
+			locking = false;//write 0 locking
+		}
+		ops++;
 	}
 	
 	float asF(int idx) {
