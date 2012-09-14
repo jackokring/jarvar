@@ -7,6 +7,14 @@ package uk.co.peopleandroid.jarvar.internals;
  * such that sequence is maintained. Reading element
  * 0 is the best way to check for DSP halt or
  * complete.
+ * 
+ * The requirement to have locking AND synchronized
+ * is to maintain an easier hardware implementation,
+ * as write locking maintains control even if
+ * the DSP is performing a goto when retasked.
+ * 
+ *  The destroy method does more clean up, and has
+ *  no memory leak. I wonder how neural nets map?
  */
 
 public class SoftDSP extends Thread {
@@ -29,6 +37,7 @@ public class SoftDSP extends Thread {
 			eval();
 			Thread.yield();
 		}
+		mem = null;
 	}
 	
 	public synchronized int read(int x) {
@@ -57,8 +66,21 @@ public class SoftDSP extends Thread {
 		return max;
 	}
 	
-	public void destroy() {
+	public synchronized void destroy() {
 		running = false;
+		SoftDSP h = list;
+		SoftDSP q = null;
+		while(h != null) {
+			if(h == this) {
+				if(q != null)
+					q.next = h.next;
+				else
+					list = h.next;
+				break;
+			}
+			q = h;
+			h = h.next;
+		}
 	}
 	
 	int mem[] = new int[256];
@@ -66,7 +88,7 @@ public class SoftDSP extends Thread {
 	synchronized void eval() {
 		int pc = mem[0];
 		int a = pc >>> 24;//pc
-		int b = (pc >> 16) & 255;//inf
+		int b = (pc >> 16) & 255;//inf (NB denormalized not good?)
 		int c = (pc >> 8) & 255;//zero
 		int d = pc & 255;//NaN
 		int i = mem[a];//instruction
